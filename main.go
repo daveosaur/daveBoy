@@ -1,5 +1,7 @@
 package main
 
+//TODO: everythingggggggggggggggg
+
 import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -17,8 +19,10 @@ type GB struct {
 	F                   flagRegister //carry flags and stuff
 	PC, SP              uint16       //program counter, stack pointer
 	WMem                [8192]byte   //workram!
+	Timer               uint32       //cycle timer
 }
 
+// this is easier than doing bitmasking bleh
 type flagRegister struct {
 	Z, N, H, CY bool //zero, negative, half-carry, and carry flags
 }
@@ -38,7 +42,7 @@ func (g *GB) Update() error {
 	if err != nil {
 		return err
 	}
-	g.PC, err = g.execute(inst)
+	err = g.execute(inst)
 	if err != nil {
 		return err
 	}

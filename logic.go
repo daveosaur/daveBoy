@@ -8,7 +8,10 @@ var (
 	outOfBounds error = errors.New("program counter out of bounds")
 )
 
-func (g *GB) execute(inst byte) (uint16, error) {
+// decode/execute the instruction.
+func (g *GB) execute(inst byte) error {
+
+	// high/low bits of instruction to switch on
 	_low := inst & 0x0F
 	_high := inst >> 4
 
@@ -43,6 +46,8 @@ func (g *GB) execute(inst byte) (uint16, error) {
 			}
 		case 0x7:
 			if _low < 0x8 {
+				//HL fetching requires another cycle
+				g.Timer++
 				addr := getPair(g.H, g.L)
 				target = &g.WMem[addr]
 			} else {
@@ -50,18 +55,29 @@ func (g *GB) execute(inst byte) (uint16, error) {
 			}
 		}
 		*target = operand
+		g.Timer++
 	//0x8 ADD/ADC
 	case 0x8:
 		operand := g.getOperand(_low)
-		if _low < 0x8 {
-			g.addWithMaybeCarry(operand, false)
-		} else {
-			g.addWithMaybeCarry(operand, true)
 
-		}
+		//if _low bit < 0x8 = ADD, otherwise ADC
+		g.addWithMaybeCarry(operand, (_low < 0x8))
+		g.Timer++
+	//0x9 SUB/SBC
+	case 0x9:
+		operand := g.getOperand(_low)
+
+		//if _low bit < 0x8 = SUB, otherwise SBC
+		g.subWithMaybeCarry(operand, (_low < 0x8))
+		g.Timer++
+	//0xA AND/XOR
+	case 0xA:
+
+	//0xB OR/CP
+	case 0xB:
 	}
 
-	return g.PC, nil
+	return nil
 }
 
 // returns byte at address
@@ -88,6 +104,7 @@ func getPair(MostSig, LeastSig byte) uint16 {
 }
 
 // get the operand for instructions 4x-Bx
+// may increase timer for HL access
 func (g *GB) getOperand(op byte) byte {
 	var operand byte
 	switch op {
@@ -104,6 +121,8 @@ func (g *GB) getOperand(op byte) byte {
 	case 0x5, 0xD:
 		operand = g.L
 	case 0x6, 0xE:
+		//HL fetching requires another cycle
+		g.Timer++
 		addr := getPair(g.H, g.L)
 		operand = g.WMem[addr]
 	case 0x7, 0xF:
@@ -111,33 +130,37 @@ func (g *GB) getOperand(op byte) byte {
 	}
 	return operand
 }
-func (g *GB) addWithMaybeCarry(input byte, carry bool) {
-	temp := g.A
-	//lazy carry addition
-	if carry {
-		input++
-	}
-	g.A += input
 
-	//set flags
-	if g.A == 0 {
-		g.F.Z = true
-	} else {
-		g.F.Z = false
+// ADD/ADC functions
+// may increase timer with HL access
+func (g *GB) addWithMaybeCarry(inp byte, ADC bool) {
+	//input is 1 more if ADC
+	if ADC {
+		inp++
 	}
-	//check halfcarry
-	//TODO: verify this i guess?
-	if ((g.A&0xF)+(input&0xF))&0x10 == 0x10 {
-		g.F.H = true
-	} else {
-		g.F.H = false
+	//half-carry and carry have to be set first
+	g.F.CY = (int16(g.A+inp) > 255)
+	//set the low bits of input & A, add together and mask out bit 4
+	//then AND with bit 4, half carry if true
+	g.F.H = (((g.A & 0x0F) + (inp&0x0F)&0x10) == 0x10)
+
+	g.A += inp
+
+	g.F.Z = (g.A == 0) //zero flag
+	g.F.N = false      //N is always reset
+}
+
+func (g *GB) subWithMaybeCarry(inp byte, SBC bool) {
+	if SBC {
+		inp++
 	}
-	//check for carry
-	//TODO: this probably doesnt actually work. fix later
-	if temp > g.A {
-		g.F.CY = true
-	} else {
-		g.F.CY = false
-	}
-	g.F.N = false //N is always reset
+	g.F.CY = (int16(g.A-inp) < 0) //lazy borrow check
+	//half borrow check
+	//TODO: not sure if this actually works but whatever.
+	g.F.H = ((g.A & 0x0F) < (inp & 0x0F))
+
+	g.A -= inp
+
+	g.F.Z = (g.A == 0) //zero flag
+	g.F.N = true       //N is always set
 }
