@@ -17,7 +17,7 @@ type GB struct {
 	A, B, C, D, E, H, L byte         //general registers
 	F                   flagRegister //carry flags and stuff
 	PC, SP              uint16       //program counter, stack pointer
-	WMem                [8192]byte   //workram!
+	Mem                 [0xFFFF]byte //memory bus
 	//gameboy is 4mhz and every operation is a multiple of 4
 	//simplify in units of 1
 	Cycle uint32 //cycle timer
@@ -26,10 +26,6 @@ type GB struct {
 // this is easier than doing bitmasking bleh
 type flagRegister struct {
 	Z, N, H, CY bool //zero, negative, half-carry, and carry flags
-}
-
-type PPU struct {
-	VRAM *[8192]byte //vram!
 }
 
 // initialize everything
